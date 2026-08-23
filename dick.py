@@ -23,7 +23,7 @@ def keep_alive():
 # تنظیمات اصلی گپ و عملیات
 TARGET_CHAT_ID = -1004346160765
 OWNER_ID = 8616643544
-SPAM_TEXT = "test"
+SPAM_TEXT = "رحیم جندس"
 TOTAL_MESSAGES = 500
 DELAY_BETWEEN = 0.01
 
