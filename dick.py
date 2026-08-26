@@ -22,7 +22,7 @@ def keep_alive():
 
 # تنظیمات اصلی گپ و عملیات
 TARGET_CHAT_ID = -1004346160765
-OWNER_ID = 8616643544
+OWNER_IDS = [8616643544, 7867345927]
 SPAM_TEXT = "test"
 TOTAL_MESSAGES = 500
 DELAY_BETWEEN = 0.01
@@ -102,7 +102,7 @@ async def main():
 
     owner_client = clients[0]
 
-    @owner_client.on(events.NewMessage(chats=TARGET_CHAT_ID, from_users=OWNER_ID))
+    @owner_client.on(events.NewMessage(chats=TARGET_CHAT_ID, from_users=OWNER_IDS))
     async def handler(event):
         global is_running
         
@@ -121,5 +121,5 @@ async def main():
     await asyncio.gather(*(c.run_until_disconnected() for c in clients))
 
 if __name__ == '__main__':
-    keep_alive()  # ← فقط این یه خط اضافه شد اینجا
+    keep_alive()
     asyncio.run(main())
