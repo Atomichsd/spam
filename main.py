@@ -1,31 +1,15 @@
 import asyncio
-from threading import Thread
-from flask import Flask
 from telethon import TelegramClient, events
-from telethon.errors import FloodWaitError
+from telethon.errors import FloodWaitError, AuthKeyDuplicatedError
 
-# ─── Flask Keep-Alive ───────────────────────────────────────
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run_flask():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run_flask)
-    t.daemon = True
-    t.start()
-# ────────────────────────────────────────────────────────────
-
-# تنظیمات اصلی گپ و عملیات
+# ─── تنظیمات اصلی ──────────────────────────────────────────
 TARGET_CHAT_ID = -1004346160765
 OWNER_IDS = [8616643544, 7867345927]
 SPAM_TEXT = "test"
 TOTAL_MESSAGES = 500
-DELAY_BETWEEN = 0.01
+
+# مقدار تاخیر نباید کمتر از 0.5 تا 0.8 ثانیه باشد، وگرنه اکانت‌ها بن یا سشن‌ها کیک می‌شوند
+DELAY_BETWEEN = 0.01 
 
 ACCOUNTS_DATA = [
     {
@@ -76,16 +60,22 @@ async def round_robin_spam(chat_id, total, text, delay):
             break
             
         current_client = clients[i % num_clients]
+        acc_num = (i % num_clients) + 1
         
         try:
             await current_client.send_message(chat_id, text)
-            print(f"[{i+1}/{total}] Sent by Acc #{i % num_clients + 1}")
+            print(f"[{i+1}/{total}] Sent by Acc #{acc_num}")
             await asyncio.sleep(delay)
         except FloodWaitError as e:
-            print(f"[!] Acc #{i % num_clients + 1} FloodWait: sleeping {e.seconds}s")
+            print(f"[!] Acc #{acc_num} FloodWait: sleeping {e.seconds}s")
             await asyncio.sleep(e.seconds)
+        except AuthKeyDuplicatedError:
+            print(f"[CRITICAL] Acc #{acc_num} session duplicated/invalidated!")
+            is_running = False
+            break
         except Exception as e:
-            print(f"[!] Error on Acc #{i % num_clients + 1}: {e}")
+            print(f"[!] Error on Acc #{acc_num}: {e}")
+            await asyncio.sleep(0.5)
 
     is_running = False
     print("[+] Finished spam cycle.")
@@ -112,14 +102,16 @@ async def main():
                 asyncio.create_task(
                     round_robin_spam(TARGET_CHAT_ID, TOTAL_MESSAGES, SPAM_TEXT, DELAY_BETWEEN)
                 )
+            else:
+                print("[!] Cycle is already active.")
                 
         elif event.raw_text == '.stop':
             await event.delete()
             is_running = False
+            print("[!] Stop triggered via command.")
 
     print("\n[READY] Self-bot is active. Send `.startgacha` in the group to begin.")
     await asyncio.gather(*(c.run_until_disconnected() for c in clients))
 
 if __name__ == '__main__':
-    keep_alive()
     asyncio.run(main())
