@@ -3,7 +3,7 @@ from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, AuthKeyDuplicatedError
 
 # ─── تنظیمات اصلی ───────────────────────────────────────────
-OWNER_IDS = [8616643544, 7867345927]
+OWNER_IDS = [8616643544, 7867345927, 8290325788]
 SPAM_TEXT = "Yo"
 TOTAL_MESSAGES = 500
 DELAY_BETWEEN = 0.5
