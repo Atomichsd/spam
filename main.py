@@ -16,7 +16,7 @@ FLOOD_REST = 300
 BATCH_SIZE = 100
 BATCH_REST = 120
 
-# ─── گروه‌های مجاز ──────────────────────────────────────────
+# ─── گروه‌های مجاز (همون ID که تلگرام نشون میده) ────────────
 ALLOWED_CHATS = [-1004411454235, -1004346160765]
 
 ACCOUNTS_DATA = [
@@ -31,38 +31,31 @@ ACCOUNTS_DATA = [
 clients = []
 running_chats = {}
 flooded_clients = set()
-
-# ─── کش اکانت‌های عضو در هر گروه ───────────────────────────
-# { chat_id: [client, client, ...] }
 chat_member_cache = {}
 
+def is_allowed_chat(chat_id):
+    """چک میکنه chat_id جزو گروه‌های مجاز هست یا نه"""
+    return chat_id in ALLOWED_CHATS
+
 async def get_clients_in_chat(chat_id):
-    """فقط اکانت‌هایی که عضو این گروه هستن رو برمیگردونه"""
+    """اکانت‌هایی که میتونن تو این گروه پیام بفرستن"""
     if chat_id in chat_member_cache:
         return chat_member_cache[chat_id]
 
     valid = []
-    for client in clients:
+    for i, client in enumerate(clients):
         try:
+            # سعی کن یه پیام تست بفرستی — اگه خطا داد عضو نیست
             await client.get_entity(chat_id)
-            # تست واقعی: سعی کن دیالوگ رو بگیری
-            async for _ in client.iter_dialogs(limit=1):
-                break
-            # اگه بتونه entity بگیره، احتمالاً عضوه؛ تست دقیق‌تر:
-            await client.get_permissions(chat_id, await client.get_me())
             valid.append(client)
             me = await client.get_me()
-            print(f"[✓] Acc {me.first_name} is member of {chat_id}")
-        except (UserNotParticipantError, ChannelPrivateError, ChatAdminRequiredError):
-            me = await client.get_me()
-            print(f"[✗] Acc {me.first_name} NOT in {chat_id} — skipped")
+            print(f"[✓] Acc #{i+1} ({me.first_name}) in chat {chat_id}")
         except Exception as e:
             me = await client.get_me()
-            print(f"[?] Acc {me.first_name} check failed for {chat_id}: {e} — including anyway")
-            valid.append(client)
+            print(f"[✗] Acc #{i+1} ({me.first_name}) can't access {chat_id}: {e}")
 
     chat_member_cache[chat_id] = valid
-    print(f"[*] Chat {chat_id}: {len(valid)}/{len(clients)} accounts available")
+    print(f"[*] Chat {chat_id}: {len(valid)}/{len(clients)} accounts usable")
     return valid
 
 async def rest_flooded_client(client, acc_num):
@@ -73,13 +66,12 @@ async def rest_flooded_client(client, acc_num):
     print(f"[+] Acc #{acc_num} back in pool!")
 
 async def round_robin_spam(chat_id, total, text, delay):
-    # فقط اکانت‌هایی که عضو این گروه هستن
     all_clients = await get_clients_in_chat(chat_id)
 
     if not all_clients:
-        print(f"[!] No accounts are members of chat {chat_id}!")
+        print(f"[!] No accounts can access chat {chat_id}!")
         try:
-            await clients[0].send_message(OWNER_IDS[0], f"⚠️ هیچ اکانتی عضو گروه {chat_id} نیست!")
+            await clients[0].send_message(OWNER_IDS[0], f"⚠️ هیچ اکانتی به گروه {chat_id} دسترسی نداره!")
         except:
             pass
         return
@@ -87,7 +79,7 @@ async def round_robin_spam(chat_id, total, text, delay):
     running_chats[chat_id] = {"is_running": True, "sent_count": 0}
     banned_clients = set()
 
-    print(f"[*] Chat {chat_id}: starting {total} messages with {len(all_clients)} accounts...")
+    print(f"[*] Chat {chat_id}: starting {total} msgs with {len(all_clients)} accounts...")
 
     i = 0
     while i < total:
@@ -122,14 +114,13 @@ async def round_robin_spam(chat_id, total, text, delay):
 
         except (ChatWriteForbiddenError, UserNotParticipantError, ChannelPrivateError, ChatAdminRequiredError):
             me = await current.get_me()
-            print(f"[~] Acc #{acc_num} ({me.first_name}) not in chat {chat_id} — skipped permanently.")
+            print(f"[~] Acc #{acc_num} ({me.first_name}) banned from {chat_id}.")
             banned_clients.add(id(current))
-            # کش رو هم آپدیت کن
             if chat_id in chat_member_cache and current in chat_member_cache[chat_id]:
                 chat_member_cache[chat_id].remove(current)
 
         except AuthKeyDuplicatedError:
-            print(f"[CRITICAL] Acc #{acc_num} session invalid! Stopping.")
+            print(f"[CRITICAL] Acc #{acc_num} session invalid!")
             running_chats[chat_id]["is_running"] = False
             break
 
@@ -159,9 +150,14 @@ async def main():
 
     owner_client = clients[0]
 
-    @owner_client.on(events.NewMessage(from_users=OWNER_IDS, chats=ALLOWED_CHATS))
+    # ─── هندلر دستورات — بدون chats= ، چک دستی داخل هندلر ───
+    @owner_client.on(events.NewMessage(from_users=OWNER_IDS))
     async def command_handler(event):
         chat_id = event.chat_id
+
+        # فقط تو گروه‌های مجاز
+        if not is_allowed_chat(chat_id):
+            return
 
         if event.raw_text.startswith('.startgacha'):
             await event.delete()
@@ -186,9 +182,12 @@ async def main():
             else:
                 await event.reply("🔴 Stopped")
 
-    @owner_client.on(events.NewMessage(chats=ALLOWED_CHATS))
+    # ─── هندلر anti-spam — بدون chats= ، چک دستی ────────────
+    @owner_client.on(events.NewMessage())
     async def anti_spam_handler(event):
         chat_id = event.chat_id
+        if not is_allowed_chat(chat_id):
+            return
         if event.sender_id == ANTI_SPAM_BOT_ID and running_chats.get(chat_id, {}).get("is_running"):
             running_chats[chat_id]["is_running"] = False
             print(f"[!] Anti-spam in {chat_id}! Stopped.")
@@ -197,7 +196,7 @@ async def main():
             except:
                 pass
 
-    print(f"\n[READY] Watching chats: {ALLOWED_CHATS}")
+    print(f"\n[READY] Watching: {ALLOWED_CHATS}")
     print("[READY] .startgacha [1-500] | .stop | .status")
     await asyncio.gather(*(c.run_until_disconnected() for c in clients))
 
