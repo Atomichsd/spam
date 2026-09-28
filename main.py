@@ -17,7 +17,7 @@ BATCH_SIZE = 100
 BATCH_REST = 120
 
 # ─── گروه‌های مجاز (همون ID که تلگرام نشون میده) ────────────
-ALLOWED_CHATS = [-1004411454235, -1004346160765]
+ALLOWED_CHATS = [-5592734478, -1004346160765]
 
 ACCOUNTS_DATA = [
     {"session": "acc1", "api_id": 31097906, "api_hash": "b9a8797d98c9118cbf3c5f1cdec71dff", "phone": "+989198779413"},
